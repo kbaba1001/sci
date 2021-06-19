@@ -54,9 +54,9 @@
                   signatures))]
     expansion))
 
-(defn extend-protocol [_ _ ctx protocol-name & impls]
+(defn extend-protocol [_ _ protocol-name & impls]
   (let [impls (utils/split-when #(not (seq? %)) impls)
-        protocol-var (@utils/eval-resolve-state ctx protocol-name)
+        protocol-var (@utils/eval-resolve-state protocol-name)
         protocol-ns (-> protocol-var deref :ns)
         pns (str (vars/getName protocol-ns))
         fq-meth-name #(symbol pns %)

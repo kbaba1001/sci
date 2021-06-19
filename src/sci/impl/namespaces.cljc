@@ -795,11 +795,9 @@
    'extend-type (with-meta protocols/extend-type
                   {:sci/macro true})
    'extend-protocol (with-meta protocols/extend-protocol
-                      {:sci/macro true
-                       :sci.impl/op needs-ctx})
+                      {:sci/macro true})
    '-reified-methods #(types/getMethods %)
-   'reify* (with-meta reify/reify*
-             {:sci.impl/op needs-ctx})
+   'reify* (copy-var reify/reify* clojure-core-ns)
    'reify (with-meta reify/reify
             {:sci/macro true
              :sci.impl/op needs-ctx})
