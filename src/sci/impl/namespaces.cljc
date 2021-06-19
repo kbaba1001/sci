@@ -799,8 +799,7 @@
    '-reified-methods #(types/getMethods %)
    'reify* (copy-var reify/reify* clojure-core-ns)
    'reify (with-meta reify/reify
-            {:sci/macro true
-             :sci.impl/op needs-ctx})
+            {:sci/macro true})
    'protocol-type-impl types/type-impl
    #?@(:clj ['proxy* (with-meta proxy/proxy*
                        {:sci.impl/op needs-ctx})
