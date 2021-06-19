@@ -8,7 +8,7 @@
             [sci.impl.utils :as utils]
             [sci.impl.vars :as vars]))
 
-(defn defprotocol [_ _ _ctx protocol-name & signatures]
+(defn defprotocol [_ _ protocol-name & signatures]
   (let [[docstring signatures]
         (let [sig (first signatures)]
           (if (string? sig) [sig (rest signatures)]

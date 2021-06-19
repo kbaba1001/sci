@@ -789,8 +789,7 @@
    ;; end multimethods
    ;; protocols
    'defprotocol (with-meta protocols/defprotocol
-                  {:sci/macro true
-                   :sci.impl/op needs-ctx})
+                  {:sci/macro true})
    'extend (with-meta protocols/extend
              {:sci.impl/op needs-ctx})
    'extends? protocols/extends?
