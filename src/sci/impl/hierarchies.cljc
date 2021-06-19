@@ -1,6 +1,7 @@
 (ns sci.impl.hierarchies
   {:no-doc true}
-  (:require [sci.impl.vars :as vars]))
+  (:require [sci.impl.utils :as utils]
+            [sci.impl.vars :as vars]))
 
 ;;;; Hierarchies
 
@@ -33,10 +34,10 @@
    (isa? h child parent)))
 
 (defn ancestors*
-  ([ctx tag]
-   (let [h @(global-hierarchy ctx)]
+  ([tag]
+   (let [h @(global-hierarchy @utils/current-ctx)]
      (ancestors h tag)))
-  ([_ctx h tag]
+  ([h tag]
    (ancestors h tag)))
 
 (defn descendants*

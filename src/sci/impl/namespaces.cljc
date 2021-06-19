@@ -852,7 +852,7 @@
    'all-ns (copy-var sci-all-ns clojure-core-ns)
    'alter-meta! (copy-core-var alter-meta!)
    'alter-var-root (copy-core-var vars/alter-var-root)
-   'ancestors (with-meta hierarchies/ancestors* {:sci.impl/op needs-ctx})
+   'ancestors (copy-var hierarchies/ancestors* clojure-core-ns)
    'aset (copy-core-var aset)
    #?@(:clj ['aset-boolean (copy-core-var aset-boolean)
              'aset-byte (copy-core-var aset-byte)
