@@ -72,7 +72,7 @@
     #_(prn expansion)
     expansion))
 
-(defn extend [ctx atype & proto+mmaps]
+(defn extend [atype & proto+mmaps]
   (doseq [[proto mmap] (partition 2 proto+mmaps)
           :let [proto-ns (:ns proto)
                 pns (vars/getName proto-ns)]]
@@ -85,13 +85,12 @@
                        :cljs js/Error)
                     (str atype " already directly implements " (:on-interface proto) " for protocol:"
                          (:var proto)))))
-    (doseq [[fn-name f] mmap]
-      (let [fn-sym (symbol (name fn-name))
-            env @(:env ctx)
-            multi-method-var (get-in env [:namespaces pns fn-sym])
-            multi-method @multi-method-var]
-        (mms/multi-fn-add-method-impl multi-method atype f))
-      )
+    (let [env @(:env @utils/current-ctx)]
+      (doseq [[fn-name f] mmap]
+        (let [fn-sym (symbol (name fn-name))
+              multi-method-var (get-in env [:namespaces pns fn-sym])
+              multi-method @multi-method-var]
+          (mms/multi-fn-add-method-impl multi-method atype f))))
     #_(-reset-methods (vars/alter-var-root (:var proto) assoc-in [:impls atype] mmap))))
 
 (defn extend-type [_ _ ctx atype & proto+meths]

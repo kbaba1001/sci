@@ -790,8 +790,7 @@
    ;; protocols
    'defprotocol (with-meta protocols/defprotocol
                   {:sci/macro true})
-   'extend (with-meta protocols/extend
-             {:sci.impl/op needs-ctx})
+   'extend protocols/extend
    'extends? protocols/extends?
    'extend-type (with-meta protocols/extend-type
                   {:sci/macro true
