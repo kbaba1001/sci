@@ -12,7 +12,7 @@
         (str "Records currently only support protocol implementations, found: " protocol-name)
         expr))))
 
-(defn defrecord [_form _ ctx record-name fields & raw-protocol-impls]
+(defn defrecord [_form _ record-name fields & raw-protocol-impls]
   (let [factory-fn-str (str "->" record-name)
         factory-fn-sym (symbol factory-fn-str)
         map-factory-sym (symbol (str "map" factory-fn-str))
@@ -24,7 +24,7 @@
         (mapcat
          (fn [[protocol-name & impls] #?(:clj expr :cljs expr)]
            (let [impls (group-by first impls)
-                 protocol (@utils/eval-resolve-state ctx protocol-name)
+                 protocol (@utils/eval-resolve-state protocol-name)
                  _ (when-not protocol
                      (utils/throw-error-with-location
                       (str "Protocol not found: " protocol-name)
