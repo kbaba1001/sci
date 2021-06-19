@@ -9,12 +9,12 @@
   (get-in @(:env ctx) [:namespaces 'clojure.core 'global-hierarchy]))
 
 (defn derive*
-  ([ctx tag parent]
-   (vars/alter-var-root (global-hierarchy ctx)
+  ([tag parent]
+   (vars/alter-var-root (global-hierarchy @utils/current-ctx)
                         (fn [h]
                           (derive h tag parent)))
    nil)
-  ([_ctx h tag parent]
+  ([h tag parent]
    (derive h tag parent)))
 
 (defn underive*
@@ -41,10 +41,10 @@
    (ancestors h tag)))
 
 (defn descendants*
-  ([ctx tag]
-   (let [h @(global-hierarchy ctx)]
+  ([tag]
+   (let [h @(global-hierarchy @utils/current-ctx)]
      (descendants h tag)))
-  ([_ctx h tag]
+  ([h tag]
    (descendants h tag)))
 
 (defn parents*
