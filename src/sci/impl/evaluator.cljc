@@ -191,12 +191,14 @@
 (declare eval-form)
 
 (defn eval-resolve
-  ([ctx sym]
-   (let [sym (eval ctx sym)]
+  ([sym]
+   (let [ctx @utils/current-ctx
+         sym (eval ctx sym)]
      (second (@utils/lookup ctx sym false))))
-  ([ctx env sym]
+  ([env sym]
    (when-not (contains? env sym)
-     (let [sym (eval ctx sym)]
+     (let [ctx @utils/current-ctx
+           sym (eval ctx sym)]
        (second (@utils/lookup ctx sym false))))))
 
 (vreset! utils/eval-resolve-state eval-resolve)

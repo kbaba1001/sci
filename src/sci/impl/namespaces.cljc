@@ -524,10 +524,10 @@
   (apply @utils/eval-use-state sci-ctx args))
 
 (defn sci-resolve
-  ([sci-ctx sym]
-   (@utils/eval-resolve-state sci-ctx sym))
-  ([sci-ctx env sym]
-   (@utils/eval-resolve-state sci-ctx env sym)))
+  ([sym]
+   (@utils/eval-resolve-state sym))
+  ([env sym]
+   (@utils/eval-resolve-state env sym)))
 
 (defn sci-refer [sci-ctx & args]
   (apply @utils/eval-refer-state sci-ctx args))
@@ -541,7 +541,7 @@
      (sci-resolve sci-ctx sym)))
   ([sci-ctx ns env sym]
    (vars/with-bindings {vars/current-ns (sci-the-ns sci-ctx ns)}
-     (sci-resolve sci-ctx env sym))))
+     (sci-resolve env sym))))
 
 (defn sci-requiring-resolve
   ([sci-ctx sym]
@@ -793,8 +793,7 @@
    'extend protocols/extend
    'extends? protocols/extends?
    'extend-type (with-meta protocols/extend-type
-                  {:sci/macro true
-                   :sci.impl/op needs-ctx})
+                  {:sci/macro true})
    'extend-protocol (with-meta protocols/extend-protocol
                       {:sci/macro true
                        :sci.impl/op needs-ctx})
@@ -1141,7 +1140,7 @@
    'reduced? (copy-core-var reduced?)
    'reset! core-protocols/reset!*
    'reset-thread-binding-frame-impl vars/reset-thread-binding-frame
-   'resolve (with-meta sci-resolve {:sci.impl/op needs-ctx})
+   'resolve (copy-var sci-resolve clojure-core-ns) #_(with-meta sci-resolve {:sci.impl/op needs-ctx})
    'reversible? (copy-core-var reversible?)
    'rsubseq (copy-core-var rsubseq)
    'reductions (copy-core-var reductions)

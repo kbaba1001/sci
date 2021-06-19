@@ -93,10 +93,10 @@
           (mms/multi-fn-add-method-impl multi-method atype f))))
     #_(-reset-methods (vars/alter-var-root (:var proto) assoc-in [:impls atype] mmap))))
 
-(defn extend-type [_ _ ctx atype & proto+meths]
+(defn extend-type [_ _ atype & proto+meths]
   (let [proto+meths (utils/split-when #(not (seq? %)) proto+meths)]
     `(do ~@(map (fn [[proto & meths]]
-                  (let [protocol-var (@utils/eval-resolve-state ctx proto)
+                  (let [protocol-var (@utils/eval-resolve-state proto)
                         protocol-ns (-> protocol-var deref :ns)
                         pns (str (vars/getName protocol-ns))
                         fq-meth-name #(symbol pns %)]
