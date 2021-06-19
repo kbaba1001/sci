@@ -389,21 +389,21 @@
              (assoc-in env [:namespaces current-ns :aliases alias-sym] ns-sym))))
   nil)
 
-(defn sci-find-ns [ctx ns-sym]
+(defn sci-find-ns [ns-sym]
   (assert (symbol? ns-sym))
-  (utils/namespace-object (:env ctx) ns-sym false nil))
+  (utils/namespace-object (:env @utils/current-ctx) ns-sym false nil))
 
-(defn sci-the-ns [ctx x]
+(defn sci-the-ns [x]
   (if (instance? #?(:clj sci.impl.vars.SciNamespace
                     :cljs sci.impl.vars/SciNamespace) x) x
-      (or (sci-find-ns ctx x)
+      (or (sci-find-ns x)
           (throw (new #?(:clj Exception :cljs js/Error)
                       (str "No namespace: " x " found"))))))
 
-(defn sci-ns-aliases [ctx sci-ns]
-  (let [sci-ns (sci-the-ns ctx sci-ns)
+(defn sci-ns-aliases [sci-ns]
+  (let [sci-ns (sci-the-ns sci-ns)
         name (sci-ns-name sci-ns)
-        aliases (get-in @(:env ctx) [:namespaces name :aliases])]
+        aliases (get-in @(:env @utils/current-ctx) [:namespaces name :aliases])]
     (zipmap (keys aliases)
             (map (fn [sym]
                    (vars/->SciNamespace sym nil))
@@ -412,53 +412,54 @@
 (defn clean-ns [m]
   (dissoc m :aliases :imports :obj :refer :refers))
 
-(defn sci-ns-interns [ctx sci-ns]
-  (let [sci-ns (sci-the-ns ctx sci-ns)
+(defn sci-ns-interns [sci-ns]
+  (let [sci-ns (sci-the-ns sci-ns)
         name (sci-ns-name sci-ns)
-        m (get-in @(:env ctx) [:namespaces name])
+        m (get-in @(:env @utils/current-ctx) [:namespaces name])
         m (clean-ns m)]
     m))
 
-(defn sci-ns-publics [ctx sci-ns]
-  (let [sci-ns (sci-the-ns ctx sci-ns)
+(defn sci-ns-publics [sci-ns]
+  (let [sci-ns (sci-the-ns sci-ns)
         name (sci-ns-name sci-ns)
-        m (get-in @(:env ctx) [:namespaces name])
+        m (get-in @(:env @utils/current-ctx) [:namespaces name])
         m (clean-ns m)]
     (into {} (keep (fn [[k v]]
                      (when-not (:private (meta v))
                        [k v]))
                    m))))
 
-(defn sci-ns-imports [ctx sci-ns]
-  (let [sci-ns (sci-the-ns ctx sci-ns)
+(defn sci-ns-imports [sci-ns]
+  (let [sci-ns (sci-the-ns sci-ns)
         name (sci-ns-name sci-ns)
-        env @(:env ctx)
+        env @(:env @utils/current-ctx)
         global-imports (:imports env)
         namespace-imports (get-in env [:namespaces name :imports])
+        ctx @utils/current-ctx
         class-opts (:class->opts ctx)
         all-aliased (concat (keys global-imports) (keys namespace-imports))
         all-imports (concat (vals global-imports) (vals namespace-imports))]
     (zipmap all-aliased (map (comp :class #(get class-opts %)) all-imports))))
 
-(defn sci-ns-refers [ctx sci-ns]
-  (let [sci-ns (sci-the-ns ctx sci-ns)
+(defn sci-ns-refers [sci-ns]
+  (let [sci-ns (sci-the-ns sci-ns)
         name (sci-ns-name sci-ns)
-        env @(:env ctx)
+        env @(:env @utils/current-ctx)
         refers (get-in env [:namespaces name :refers])
         clojure-core (get-in env [:namespaces 'clojure.core])
         clojure-core (clean-ns clojure-core)]
     (merge clojure-core refers)))
 
-(defn sci-ns-map [ctx sci-ns]
-  (merge (sci-ns-interns ctx sci-ns)
-         (sci-ns-refers ctx sci-ns)
-         (sci-ns-imports ctx sci-ns)))
+(defn sci-ns-map [sci-ns]
+  (merge (sci-ns-interns sci-ns)
+         (sci-ns-refers sci-ns)
+         (sci-ns-imports sci-ns)))
 
-(defn sci-ns-unmap [ctx sci-ns sym]
+(defn sci-ns-unmap [sci-ns sym]
   (assert (symbol? sym)) ; protects :aliases, :imports, :obj, etc.
-  (swap! (:env ctx)
+  (swap! (:env @utils/current-ctx)
          (fn [env]
-           (let [sci-ns (sci-the-ns ctx sci-ns)
+           (let [sci-ns (sci-the-ns sci-ns)
                  name (sci-ns-name sci-ns)]
              (update-in env [:namespaces name]
                         (fn [the-ns-map]
@@ -478,27 +479,27 @@
   (let [env (:env @utils/current-ctx)]
     (map #(utils/namespace-object env % true nil) (keys (get @env :namespaces)))))
 
-(defn sci-remove-ns [ctx sym]
-  (let [env (:env ctx)]
+(defn sci-remove-ns [sym]
+  (let [env (:env @utils/current-ctx)]
     (swap! env update :namespaces dissoc sym)
     nil))
 
 (defn sci-intern
   ;; in this case the var will become unbound
-  ([ctx ns var-sym]
-   (let [ns (sci-the-ns ctx ns)
+  ([ns var-sym]
+   (let [ns (sci-the-ns ns)
          ns-name (sci-ns-name ns)
-         env (:env ctx)]
+         env (:env @utils/current-ctx)]
      (or (get-in @env [:namespaces ns-name var-sym])
          (let [var-name (symbol (str ns-name) (str var-sym))
                new-var (vars/->SciVar nil var-name (meta var-sym) false)]
            (vars/unbind new-var)
            (swap! env assoc-in [:namespaces ns-name var-sym] new-var)
            new-var))))
-  ([ctx ns var-sym val]
-   (let [ns (sci-the-ns ctx ns)
+  ([ns var-sym val]
+   (let [ns (sci-the-ns ns)
          ns-name (sci-ns-name ns)
-         env (:env ctx)]
+         env (:env @utils/current-ctx)]
      (or (when-let [v (get-in @env [:namespaces ns-name var-sym])]
            (vars/bindRoot v val)
            v)
@@ -530,18 +531,18 @@
   ([env sym]
    (@utils/eval-resolve-state env sym)))
 
-(defn sci-refer [sci-ctx & args]
-  (apply @utils/eval-refer-state sci-ctx args))
+(defn sci-refer [& args]
+  (apply @utils/eval-refer-state @utils/current-ctx args))
 
 (defn sci-refer-clojure [_ _ & filters]
   `(clojure.core/refer '~'clojure.core ~@filters))
 
 (defn sci-ns-resolve
-  ([sci-ctx ns sym]
-   (vars/with-bindings {vars/current-ns (sci-the-ns sci-ctx ns)}
-     (sci-resolve sci-ctx sym)))
-  ([sci-ctx ns env sym]
-   (vars/with-bindings {vars/current-ns (sci-the-ns sci-ctx ns)}
+  ([ns sym]
+   (vars/with-bindings {vars/current-ns (sci-the-ns ns)}
+     (sci-resolve sym)))
+  ([ns env sym]
+   (vars/with-bindings {vars/current-ns (sci-the-ns ns)}
      (sci-resolve env sym))))
 
 (defn sci-requiring-resolve
@@ -555,11 +556,11 @@
                     :cljs js/Error)
                  (str "Not a qualified symbol: " sym))))))
 
-(defn sci-find-var [sci-ctx sym]
+(defn sci-find-var [sym]
   (if (qualified-symbol? sym)
     (let [nsname (-> sym namespace symbol)
           sym' (-> sym name symbol)]
-      (if-let [namespace (-> sci-ctx :env deref :namespaces (get nsname))]
+      (if-let [namespace (-> @utils/current-ctx :env deref :namespaces (get nsname))]
         (get namespace sym')
         (throw (new #?(:clj IllegalArgumentException
                        :cljs js/Error)
@@ -972,8 +973,8 @@
    'ex-info (copy-core-var ex-info)
    'ex-message (copy-core-var ex-message)
    'ex-cause (copy-core-var ex-cause)
-   'find-ns (with-meta sci-find-ns {:sci.impl/op needs-ctx})
-   'find-var (with-meta sci-find-var {:sci.impl/op needs-ctx})
+   'find-ns (copy-var sci-find-ns clojure-core-ns)
+   'find-var (copy-var sci-find-var clojure-core-ns)
    'first (copy-core-var first)
    'float? (copy-core-var float?)
    'floats (copy-core-var floats)
@@ -1011,7 +1012,7 @@
    'instance? protocols/instance-impl
    'int-array (copy-core-var int-array)
    'interleave (copy-core-var interleave)
-   'intern (with-meta sci-intern {:sci.impl/op needs-ctx})
+   'intern (copy-var sci-intern clojure-core-ns)
    'into (copy-core-var into)
    'iterate (copy-core-var iterate)
    #?@(:clj ['iterator-seq (copy-core-var iterator-seq)])
@@ -1075,19 +1076,19 @@
    'nthrest (copy-core-var nthrest)
    'nil? (copy-core-var nil?)
    'nat-int? (copy-core-var nat-int?)
-   'ns-resolve (with-meta sci-ns-resolve {:sci.impl/op needs-ctx})
+   'ns-resolve (copy-var sci-ns-resolve clojure-core-ns)
    'number? (copy-core-var number?)
    'not-empty (copy-core-var not-empty)
    'not-any? (copy-core-var not-any?)
    'next (copy-core-var next)
    'nnext (copy-core-var nnext)
-   'ns-aliases (with-meta sci-ns-aliases {:sci.impl/op needs-ctx})
-   'ns-imports (with-meta sci-ns-imports {:sci.impl/op needs-ctx})
-   'ns-interns (with-meta sci-ns-interns {:sci.impl/op needs-ctx})
-   'ns-publics (with-meta sci-ns-publics {:sci.impl/op needs-ctx})
-   'ns-refers (with-meta sci-ns-refers {:sci.impl/op needs-ctx})
-   'ns-map (with-meta sci-ns-map {:sci.impl/op needs-ctx})
-   'ns-unmap (with-meta sci-ns-unmap {:sci.impl/op needs-ctx})
+   'ns-aliases (copy-var sci-ns-aliases clojure-core-ns)
+   'ns-imports (copy-var sci-ns-imports clojure-core-ns)
+   'ns-interns (copy-var sci-ns-interns clojure-core-ns)
+   'ns-publics (copy-var sci-ns-publics clojure-core-ns)
+   'ns-refers (copy-var sci-ns-refers clojure-core-ns)
+   'ns-map (copy-var sci-ns-map clojure-core-ns)
+   'ns-unmap (copy-var sci-ns-unmap clojure-core-ns)
    'ns-name sci-ns-name
    'odd? (copy-core-var odd?)
    'object-array (copy-core-var object-array)
@@ -1109,7 +1110,7 @@
    'qualified-keyword? (copy-core-var qualified-keyword?)
    'quot (copy-core-var quot)
    're-seq (copy-core-var re-seq)
-   'refer (with-meta sci-refer {:sci.impl/op needs-ctx})
+   'refer (copy-var sci-refer clojure-core-ns)
    'refer-clojure (macrofy sci-refer-clojure)
    're-find (copy-core-var re-find)
    #?@(:clj ['re-groups (copy-core-var re-groups)])
@@ -1119,7 +1120,7 @@
    'realized? (copy-core-var realized?)
    'rem (copy-core-var rem)
    'remove (copy-core-var remove)
-   'remove-ns (with-meta sci-remove-ns {:sci.impl/op needs-ctx})
+   'remove-ns (copy-var sci-remove-ns clojure-core-ns)
    'require (with-meta require {:sci.impl/op needs-ctx})
    'reset-meta! (copy-core-var reset-meta!)
    'rest (copy-core-var rest)
@@ -1135,7 +1136,7 @@
    'reduced? (copy-core-var reduced?)
    'reset! core-protocols/reset!*
    'reset-thread-binding-frame-impl vars/reset-thread-binding-frame
-   'resolve (copy-var sci-resolve clojure-core-ns) #_(with-meta sci-resolve {:sci.impl/op needs-ctx})
+   'resolve (copy-var sci-resolve clojure-core-ns)
    'reversible? (copy-core-var reversible?)
    'rsubseq (copy-core-var rsubseq)
    'reductions (copy-core-var reductions)
@@ -1195,7 +1196,7 @@
    'take-last (copy-core-var take-last)
    'take-nth (copy-core-var take-nth)
    'take-while (copy-core-var take-while)
-   'the-ns (with-meta sci-the-ns {:sci.impl/op needs-ctx})
+   'the-ns (copy-var sci-the-ns clojure-core-ns)
    'trampoline (copy-core-var trampoline)
    'transduce (copy-core-var transduce)
    'transient (copy-core-var transient)
@@ -1292,11 +1293,10 @@
              'xml-seq (copy-core-var xml-seq)])})
 
 (defn dir-fn
-  [ctx ns]
+  [ns]
   (let [current-ns (vars/current-ns-name)
-        the-ns (sci-the-ns ctx
-                           (get (sci-ns-aliases ctx current-ns) ns ns))]
-    (sort (map first (sci-ns-publics ctx the-ns)))))
+        the-ns (sci-the-ns (get (sci-ns-aliases current-ns) ns ns))]
+    (sort (map first (sci-ns-publics the-ns)))))
 
 (defn dir
   [_ _ nsname]
@@ -1328,10 +1328,10 @@
 (defn find-doc
   "Prints documentation for any var whose documentation or name
   contains a match for re-string-or-pattern"
-  [ctx re-string-or-pattern]
+  [re-string-or-pattern]
   (let [re (re-pattern re-string-or-pattern)
         all-ns (sci-all-ns)
-        ms (concat (mapcat #(sort-by :name (map meta (vals (sci-ns-interns ctx %))))
+        ms (concat (mapcat #(sort-by :name (map meta (vals (sci-ns-interns %))))
                            all-ns)
                    (map #(assoc (meta %)
                                 :name (sci-ns-name %)) all-ns)
@@ -1346,14 +1346,14 @@
   "Given a regular expression or stringable thing, return a seq of all
   public definitions in all currently-loaded namespaces that match the
   str-or-pattern."
-  [ctx str-or-pattern]
+  [str-or-pattern]
   (let [matches? (if (instance? #?(:clj java.util.regex.Pattern :cljs js/RegExp) str-or-pattern)
                    #(re-find str-or-pattern (str %))
                    #(str/includes? (str %) (str str-or-pattern)))]
     (sort (mapcat (fn [ns]
                     (let [ns-name (str ns)]
                       (map #(symbol ns-name (str %))
-                           (filter matches? (keys (sci-ns-publics ctx ns))))))
+                           (filter matches? (keys (sci-ns-publics ns))))))
                   (sci-all-ns)))))
 
 #_(defn source-fn
@@ -1480,14 +1480,16 @@
                             (+ 2 (- (count (.getStackTrace cause))
                                     (count st)))))))))))
 
+(def clojure-repl-ns (vars/->SciNamespace 'clojure.repl nil))
+
 (def clojure-repl
-  {:obj (vars/->SciNamespace 'clojure.repl nil)
-   'dir-fn (with-meta dir-fn {:sci.impl/op needs-ctx})
+  {:obj clojure-repl-ns
+   'dir-fn (copy-var dir-fn clojure-repl-ns)
    'dir (macrofy dir)
    'print-doc (with-meta print-doc {:private true})
    'doc (macrofy doc)
-   'find-doc (with-meta find-doc {:sci.impl/op needs-ctx})
-   'apropos (with-meta apropos {:sci.impl/op needs-ctx})
+   'find-doc (copy-var find-doc clojure-repl-ns)
+   'apropos (copy-var apropos clojure-repl-ns)
    'source (macrofy source)
    'source-fn (with-meta source-fn {:sci.impl/op needs-ctx})
    #?@(:clj ['pst (with-meta pst {:sci.impl/op needs-ctx})
