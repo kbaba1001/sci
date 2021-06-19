@@ -28,17 +28,19 @@
    (let [reader (r/indexing-push-back-reader (r/string-push-back-reader s))]
      (parser/parse-next sci-ctx reader))))
 
-(defn eval [sci-ctx form]
-  (@utils/eval-form-state sci-ctx form))
+(defn eval
+  ([form]
+   (@utils/eval-form-state @utils/current-ctx form)))
 
-(defn load-string [sci-ctx s]
-  (vars/with-bindings {vars/current-ns @vars/current-ns}
-    (let [reader (r/indexing-push-back-reader (r/string-push-back-reader s))]
-      (loop [ret nil]
-        (let [x (parser/parse-next sci-ctx reader)]
-          (if (utils/kw-identical? parser/eof x)
-            ret
-            (recur (eval sci-ctx x))))))))
+(defn load-string [s]
+  (let [ctx @utils/current-ctx]
+    (vars/with-bindings {vars/current-ns @vars/current-ns}
+      (let [reader (r/indexing-push-back-reader (r/string-push-back-reader s))]
+        (loop [ret nil]
+          (let [x (parser/parse-next ctx reader)]
+            (if (utils/kw-identical? parser/eof x)
+              ret
+              (recur (@utils/eval-form-state ctx x)))))))))
 
 ;; used by source-fn
 (defn source-logging-reader

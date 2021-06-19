@@ -60,7 +60,8 @@
                     _ (update-stats ctx :eval (- t1 t0))])]
       ret)))
 
-(defn eval-form [ctx form]
+(defn eval-form
+  [ctx form]
   (if (seq? form)
     (if (= 'do (first form))
       (loop [exprs (rest form)

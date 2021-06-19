@@ -188,8 +188,6 @@
 
 ;;;; Namespaces
 
-(declare eval-form)
-
 (defn eval-resolve
   ([sym]
    (let [ctx @utils/current-ctx
