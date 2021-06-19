@@ -382,8 +382,8 @@
 (defn sci-ns-name [^sci.impl.vars.SciNamespace ns]
   (vars/getName ns))
 
-(defn sci-alias [ctx alias-sym ns-sym]
-  (swap! (:env ctx)
+(defn sci-alias [alias-sym ns-sym]
+  (swap! (:env @utils/current-ctx)
          (fn [env]
            (let [current-ns (vars/current-ns-name)]
              (assoc-in env [:namespaces current-ns :aliases alias-sym] ns-sym))))
@@ -394,7 +394,8 @@
   (utils/namespace-object (:env ctx) ns-sym false nil))
 
 (defn sci-the-ns [ctx x]
-  (if (instance? sci.impl.vars.SciNamespace x) x
+  (if (instance? #?(:clj sci.impl.vars.SciNamespace
+                    :cljs sci.impl.vars/SciNamespace) x) x
       (or (sci-find-ns ctx x)
           (throw (new #?(:clj Exception :cljs js/Error)
                       (str "No namespace: " x " found"))))))
@@ -473,8 +474,8 @@
                                 :else the-ns-map))))))
   nil)
 
-(defn sci-all-ns [ctx]
-  (let [env (:env ctx)]
+(defn sci-all-ns []
+  (let [env (:env @utils/current-ctx)]
     (map #(utils/namespace-object env % true nil) (keys (get @env :namespaces)))))
 
 (defn sci-remove-ns [ctx sym]
@@ -847,8 +848,8 @@
    'add-watch (copy-core-var add-watch)
    'remove-watch (copy-core-var remove-watch)
    'aget (copy-core-var aget)
-   'alias (with-meta sci-alias {:sci.impl/op needs-ctx})
-   'all-ns (with-meta sci-all-ns {:sci.impl/op needs-ctx})
+   'alias (copy-var sci-alias clojure-core-ns)
+   'all-ns (copy-var sci-all-ns clojure-core-ns)
    'alter-meta! (copy-core-var alter-meta!)
    'alter-var-root (copy-core-var vars/alter-var-root)
    'ancestors (with-meta hierarchies/ancestors* {:sci.impl/op needs-ctx})
@@ -1330,10 +1331,11 @@
   contains a match for re-string-or-pattern"
   [ctx re-string-or-pattern]
   (let [re (re-pattern re-string-or-pattern)
+        all-ns (sci-all-ns)
         ms (concat (mapcat #(sort-by :name (map meta (vals (sci-ns-interns ctx %))))
-                           (sci-all-ns ctx))
+                           all-ns)
                    (map #(assoc (meta %)
-                                :name (sci-ns-name %)) (sci-all-ns ctx))
+                                :name (sci-ns-name %)) all-ns)
                    #_(map special-doc (keys special-doc-map)))]
     (doseq [m ms
             :when (and (:doc m)
@@ -1353,7 +1355,7 @@
                     (let [ns-name (str ns)]
                       (map #(symbol ns-name (str %))
                            (filter matches? (keys (sci-ns-publics ctx ns))))))
-                  (sci-all-ns ctx)))))
+                  (sci-all-ns)))))
 
 #_(defn source-fn
     "Returns a string of the source code for the given symbol, if it can
