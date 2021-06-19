@@ -1,8 +1,9 @@
 (ns sci.impl.proxy
   {:no-doc true}
-  (:refer-clojure :exclude [proxy]))
+  (:refer-clojure :exclude [proxy])
+  (:require [sci.impl.utils :as utils]))
 
-(defn proxy [form _ _ctx classes _args & methods]
+(defn proxy [form _ classes _args & methods]
   (let [abstract-class (first classes)
         interfaces (vec (rest classes))
         methods (into {}
@@ -19,8 +20,8 @@
     `(clojure.core/proxy* '~form ~abstract-class ~interfaces ~methods)))
 
 (defn proxy*
-  [ctx _form abstract-class interfaces methods]
-  (if-let [pfn (:proxy-fn ctx)]
+  [_form abstract-class interfaces methods]
+  (if-let [pfn (:proxy-fn @utils/current-ctx)]
     (let [{interfaces true protocols false} (group-by class? interfaces)]
       (pfn {:class abstract-class
             :interfaces (set interfaces)

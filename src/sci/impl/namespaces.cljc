@@ -801,11 +801,9 @@
    'reify (with-meta reify/reify
             {:sci/macro true})
    'protocol-type-impl types/type-impl
-   #?@(:clj ['proxy* (with-meta proxy/proxy*
-                       {:sci.impl/op needs-ctx})
+   #?@(:clj ['proxy* (copy-var proxy/proxy* clojure-core-ns)
              'proxy (with-meta proxy/proxy
-                      {:sci/macro true
-                       :sci.impl/op needs-ctx})])
+                      {:sci/macro true})])
    'satisfies? protocols/satisfies?
    ;; end protocols
    ;; IDeref as protocol
