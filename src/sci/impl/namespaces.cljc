@@ -775,8 +775,7 @@
    ;; end REPL variables
    ;; multimethods
    'defmulti (with-meta mm/defmulti
-               {:sci/macro true
-                :sci.impl/op needs-ctx})
+               {:sci/macro true})
    'defmethod (macrofy mm/defmethod)
    'get-method (copy-core-var get-method)
    'methods (copy-core-var methods)

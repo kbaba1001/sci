@@ -1,7 +1,8 @@
 (ns sci.impl.multimethods
   {:no-doc true}
   (:refer-clojure :exclude [defmulti defmethod])
-  (:require [sci.impl.hierarchies :refer [global-hierarchy]]))
+  (:require [sci.impl.hierarchies :refer [global-hierarchy]]
+            [sci.impl.utils :as utils]))
 
 #?(:clj (set! *warn-on-reflection* true))
 
@@ -41,7 +42,7 @@
   a reference type e.g. a var (i.e. via the Var-quote dispatch macro #'
   or the var special form)."
   {:arglists '([name docstring? attr-map? dispatch-fn & options])}
-  [_ _ ctx mm-name & options]
+  [_ _ mm-name & options]
   (let [docstring   (if (string? (first options))
                       (first options)
                       nil)
@@ -69,7 +70,7 @@
 
     (let [options   (apply hash-map options)
           default   (get options :default :default)
-          hierarchy (get options :hierarchy (global-hierarchy ctx))]
+          hierarchy (get options :hierarchy (global-hierarchy @utils/current-ctx))]
       (check-valid-options options :default :hierarchy)
       #?(:clj `(let [v# (def ~mm-name)]
                  (when-not (and (clojure.core/has-root-impl v#) (clojure.core/multi-fn?-impl (deref v#)))

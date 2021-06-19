@@ -245,3 +245,5 @@
         {:params new-params
          :body [`(let ~lets
                    ~@body)]}))))
+
+(def current-ctx (vars/dynamic-var 'ctx nil))
