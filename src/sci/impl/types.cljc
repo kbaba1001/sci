@@ -10,7 +10,13 @@
 
 (extend-protocol INode
   #?(:clj Object :cljs default)
-  (eval-node [this ctx] this))
+  (eval-node [this ctx]
+    ;; (prn (type this))
+    this))
+
+(defrecord ConstantNode [obj]
+  INode
+  (eval-node [_this _ctx] obj))
 
 (extend-protocol INode
   nil

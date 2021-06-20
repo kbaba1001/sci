@@ -1168,7 +1168,7 @@
    ;; (prn :ana expr (:meta ctx))
    (let [m (meta expr)]
      (cond
-       (constant? expr) expr ;; constants do not carry metadata
+       (constant? expr) (types/->ConstantNode expr) ;; constants do not carry metadata
        (symbol? expr) (let [v (resolve/resolve-symbol ctx expr false)
                             mv (meta v)]
                         (cond (constant? v) v
