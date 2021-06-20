@@ -1061,7 +1061,7 @@
                                          (mark-eval-call (cons f children)
                                                          :sci.impl/f-meta f-meta)
                                          f children)))))
-                    #_(catch #?(:clj Exception :cljs js/Error) e
+                    (catch #?(:clj Exception :cljs js/Error) e
                       (rethrow-with-location-of-node ctx e
                                                      ;; adding metadata for error reporting
                                                      (mark-eval-call
@@ -1124,6 +1124,13 @@
                            (zipmap (analyze-children ctx ks)
                                    (analyze-children ctx vs)))
         analyzed-meta (when m (analyze ctx #_(assoc ctx :meta true) m))
+        analyzed-meta (if (:meta ctx)
+                        (if (and constant-map?
+                                 ;; meta was also a constant-map
+                                 (identical? m analyzed-meta))
+                          analyzed-meta
+                          (assoc analyzed-meta :sci.impl/op :eval))
+                        analyzed-meta)
         #_#_analyzed-meta (if (and constant-map?
                                ;; meta was also a constant-map
                                (identical? m analyzed-meta))
@@ -1154,7 +1161,9 @@
                            (with-meta analyzed-map md)))
                        expr)
                       (with-meta analyzed-map analyzed-meta)))))
-              analyzed-map)]
+              (do
+                ;; (prn :dude analyzed-meta)
+                (with-meta analyzed-map analyzed-meta)))]
     ret))
 
 (defn analyze-vec-or-set

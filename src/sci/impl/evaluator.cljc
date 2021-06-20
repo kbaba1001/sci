@@ -99,6 +99,7 @@
   [ctx var-name init m]
   (let [init (eval ctx init)
         m (or m (meta var-name))
+        ;; _ (prn :m m (meta m))
         m (eval-map ctx m) ;; m is marked with eval op in analyzer only when necessary
         cnn (vars/getName (:ns m))
         assoc-in-env
