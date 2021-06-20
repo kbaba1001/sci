@@ -1061,7 +1061,7 @@
                                          (mark-eval-call (cons f children)
                                                          :sci.impl/f-meta f-meta)
                                          f children)))))
-                    (catch #?(:clj Exception :cljs js/Error) e
+                    #_(catch #?(:clj Exception :cljs js/Error) e
                       (rethrow-with-location-of-node ctx e
                                                      ;; adding metadata for error reporting
                                                      (mark-eval-call
@@ -1103,6 +1103,11 @@
       (return-call ctx the-map array-map analyzed-children)
       (return-call ctx the-map hash-map analyzed-children))))
 
+(defn eval-fn? [x]
+  (instance? #?(:clj sci.impl.types.EvalFn
+                :cljs sci.impl.types/EvalFn)
+             x))
+
 (defn analyze-map
   [ctx expr m]
   (let [ks (keys expr)
@@ -1118,23 +1123,37 @@
                            :else
                            (zipmap (analyze-children ctx ks)
                                    (analyze-children ctx vs)))
-        analyzed-meta (when m (analyze (assoc ctx :meta true) m))
-        analyzed-meta (if (and constant-map?
+        analyzed-meta (when m (analyze ctx #_(assoc ctx :meta true) m))
+        #_#_analyzed-meta (if (and constant-map?
                                ;; meta was also a constant-map
                                (identical? m analyzed-meta))
                         analyzed-meta
                         (assoc analyzed-meta :sci.impl/op :eval))
         ret (if analyzed-meta
-              (if (instance? #?(:clj sci.impl.types.EvalFn
-                                :cljs sci.impl.types/EvalFn)
-                             analyzed-map)
+              (if (and (eval-fn? analyzed-map)
+                       (eval-fn? analyzed-meta))
                 (ctx-fn
                  (fn [ctx]
-                   (let [md (eval/handle-meta ctx analyzed-meta)
+                   (let [md (eval/eval ctx analyzed-meta)
                          coll (eval/eval ctx analyzed-map)]
                      (with-meta coll md)))
                  expr)
-                (with-meta analyzed-map analyzed-meta))
+                (if (eval-fn? analyzed-map)
+                  (ctx-fn
+                   (fn [ctx]
+                     (let [md (eval/handle-meta ctx analyzed-meta)
+                           coll (eval/eval ctx analyzed-map)]
+                       (with-meta coll md)))
+                   expr)
+                  (do
+                    ;; (prn :> analyzed-map :< analyzed-meta)
+                    (if (eval-fn? analyzed-meta)
+                      (ctx-fn
+                       (fn [ctx]
+                         (let [md (eval/eval ctx analyzed-meta)]
+                           (with-meta analyzed-map md)))
+                       expr)
+                      (with-meta analyzed-map analyzed-meta)))))
               analyzed-map)]
     ret))
 
