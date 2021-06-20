@@ -335,10 +335,6 @@
                         :cljs sci.impl.types/EvalVar) expr)
           (let [v (.-v ^sci.impl.types.EvalVar expr)]
             (deref-1 v))
-          ;; #?(:clj (instance? clojure.lang.IPersistentMap expr)
-          ;;    :cljs (if (nil? expr) false
-          ;;              (satisfies? IMap expr)))
-          ;; (eval-map ctx expr)
           :else expr)
     (catch #?(:clj Throwable :cljs js/Error) e
       (rethrow-with-location-of-node ctx e expr))))
