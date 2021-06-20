@@ -1134,7 +1134,7 @@
                          coll (eval/eval ctx analyzed-map)]
                      (with-meta coll md)))
                  expr)
-                (with-meta analyzed-map analyzed-meta))
+                (with-meta (types/map->MapNode analyzed-map) analyzed-meta))
               analyzed-map)]
     ret))
 

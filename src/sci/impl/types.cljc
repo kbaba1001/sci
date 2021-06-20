@@ -5,9 +5,22 @@
   (setVal [_this _v])
   (getVal [_this]))
 
+(defprotocol INode
+  (eval-node [this ctx]))
+
+(extend-protocol INode
+  #?(:clj Object :cljs default)
+  (eval-node [this ctx] this))
+
+(extend-protocol INode
+  nil
+  (eval-node [this ctx] nil))
+
 (deftype EvalVar [v]
   IBox
-  (getVal [_this] v))
+  (getVal [_this] v)
+  INode
+  (eval-node [_this _ctx] @v))
 
 (defprotocol IReified
   (getInterfaces [_])
@@ -63,4 +76,29 @@
   (sexpr [_] expr)
   Object
   (toString [_this]
-    (str expr)))
+    (str expr))
+  INode
+  (eval-node [_this ctx]
+    (f ctx)))
+
+(def kw-identical? #?(:clj identical? :cljs keyword-identical?))
+
+(defn handle-meta [ctx m]
+  ;; Sometimes metadata needs eval. In this case the metadata has metadata.
+  (-> (if-let [mm (meta m)]
+        (if (when mm (get mm :sci.impl/op))
+          (eval-node m ctx)
+          m)
+        m)
+      (dissoc :sci.impl/op)))
+
+(defrecord MapNode []
+  INode
+  (eval-node [this ctx]
+    (if-let [m (meta this)]
+      (if (kw-identical? :eval (:sci.impl/op m))
+        (with-meta (zipmap (map #(eval-node % ctx) (keys this))
+                           (map #(eval-node % ctx) (vals this)))
+          (handle-meta ctx m))
+        this)
+      this)))

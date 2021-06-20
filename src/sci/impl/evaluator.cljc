@@ -7,7 +7,7 @@
    [sci.impl.interop :as interop]
    [sci.impl.macros :as macros]
    [sci.impl.records :as records]
-   [sci.impl.types]
+   [sci.impl.types :as types]
    [sci.impl.utils :as utils :refer [throw-error-with-location
                                      rethrow-with-location-of-node
                                      kw-identical?]]
@@ -319,7 +319,8 @@
 (defn eval
   [ctx expr]
   (try
-    (cond (instance? #?(:clj sci.impl.types.EvalFn
+    (types/eval-node expr ctx)
+    #_(cond (instance? #?(:clj sci.impl.types.EvalFn
                         :cljs sci.impl.types/EvalFn) expr)
           (let [f (.-f ^sci.impl.types.EvalFn expr)]
             (f ctx))
