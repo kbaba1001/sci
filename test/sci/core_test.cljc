@@ -1043,6 +1043,7 @@
       (is (true? (eval* "(:foo (meta ^:foo #{(rand-int 10)}))")))))
   (testing "Reader metadata is evaluated on fns"
     (is (true? (eval* "(= 6 (:foo (meta ^{:foo (+ 1 2 3)} (fn []))))")))
+    (is (true? (eval* "(= 6 (:bar (:foo (meta ^{:foo {:bar (+ 1 2 3)}} (fn [])))))")))
     (testing "Fns don't have :line and :column metadata"
       (is (true? (eval* "(nil? (:line (meta ^{:foo (+ 1 2 3)} (fn []))))")))))
   (testing "meta on nested maps"
