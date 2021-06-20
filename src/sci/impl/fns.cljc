@@ -71,7 +71,7 @@
                 ~'bindings (get-2 ~'ctx :bindings)
                 ~@assocs
                 ctx# (assoc-3 ~'ctx :bindings ~'bindings)
-                ret# (eval/eval ctx# ~'body)
+                ret# (t/eval-node ~'body ctx#)
                 ;; m (meta ret)
                 recur?# (instance? Recur ret#)]
             (if recur?#
@@ -107,7 +107,7 @@
                    (throw-arity ctx nsm fn-name macro? args))
                  ret)))
            ctx (assoc-3 ctx :bindings bindings)
-           ret (eval/eval ctx body)
+           ret (t/eval-node body ctx)
            ;; m (meta ret)
            recur? (instance? Recur ret)]
        (if recur?
@@ -139,7 +139,7 @@
                      :cljs var-arg-name)
             (case (int fixed-arity)
               0 (fn arity-0 []
-                  (let [ret (eval/eval ctx body)
+                  (let [ret (t/eval-node body ctx)
                         ;; m (meta ret)
                         recur? (instance? Recur ret)]
                     (if recur? (recur) ret)))
