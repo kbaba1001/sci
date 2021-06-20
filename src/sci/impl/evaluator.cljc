@@ -90,14 +90,19 @@
         m)
       (dissoc :sci.impl/op)))
 
+(defn eval* [ctx expr]
+  (if (map? expr)
+    (eval-map ctx expr)
+    (eval ctx expr)))
+
 (defn eval-map
   [ctx expr]
   (if-let [m (meta expr)]
     (do
       ;; (prn :expr expr :m m)
       (if (kw-identical? :eval (:sci.impl/op m))
-        (with-meta (zipmap (map #(eval ctx %) (keys expr))
-                           (map #(eval ctx %) (vals expr)))
+        (with-meta (zipmap (map #(eval* ctx %) (keys expr))
+                           (map #(eval* ctx %) (vals expr)))
           (handle-meta ctx m))
         expr))
     expr))
