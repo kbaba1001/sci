@@ -297,7 +297,7 @@
   (let [syms (map first fnspecs)]
     `(let ~(vec (interleave syms (repeat '(clojure.core/-new-var))))
        ~@(map (fn [sym fn-spec]
-                `(clojure.core/alter-var-root ~sym (constantly (fn ~sym ~@(rest fn-spec)))))
+                `(clojure.core/alter-var-root ~sym (constantly (fn #_~sym ~@(rest fn-spec)))))
               syms fnspecs)
        (let ~(vec (interleave syms (map (fn [sym]
                                           `(clojure.core/var-get ~sym))
