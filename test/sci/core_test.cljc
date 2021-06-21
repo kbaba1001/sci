@@ -160,7 +160,9 @@
                (let [a (atom 0)]
                  (tu/eval*
                   '(let [x 3] (f) (f) x) {:bindings {'f #(swap! a inc)}})
-                 @a))))))
+                 @a)))))
+  (testing "nested lets"
+    (is (= [2 1] (eval* "(let [x 1] [(let [x 2] x) x])")))))
 
 (deftest fn-literal-test
   (is (= '(1 2 3)
