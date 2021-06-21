@@ -359,9 +359,10 @@
                  binding-name (if t (vary-meta binding-name
                                                assoc :tag t)
                                   binding-name)
-                 v (analyze ctx binding-value)]
-             [(update ctx :bindings assoc binding-name v)
-              (conj new-let-bindings binding-name v)]))
+                 v (analyze ctx binding-value)
+                 ssa-name (gensym binding-name)]
+             [(update ctx :bindings assoc binding-name ssa-name)
+              (conj new-let-bindings ssa-name v)]))
          [ctx []]
          (partition 2 destructured-let-bindings))
         body (analyze-children ctx exprs)]

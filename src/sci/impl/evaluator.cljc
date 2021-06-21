@@ -70,13 +70,17 @@
                              [ctx bindings]
                              (recur ctx #_bindings
                                     rest-let-bindings))))]
-    (when exprs
-      (loop [exprs exprs]
-        (let [e (first exprs)
-              ret (eval ctx bindings e)
-              nexprs (next exprs)]
-          (if nexprs (recur nexprs)
-              ret))))))
+    (try
+      (when exprs
+           (loop [exprs exprs]
+             (let [e (first exprs)
+                   ret (eval ctx bindings e)
+                   nexprs (next exprs)]
+               (if nexprs (recur nexprs)
+                   ret))))
+      (finally
+        (run! #(.remove ^java.util.HashMap bindings %)
+              (take-nth 2 let-bindings))))))
 
 (defn handle-meta [ctx bindings m]
   ;; Sometimes metadata needs eval. In this case the metadata has metadata.

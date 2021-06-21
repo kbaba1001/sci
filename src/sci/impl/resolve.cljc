@@ -90,7 +90,7 @@
   (let [bindings (faster/get-2 ctx :bindings)]
     (or
      ;; bindings are not checked for permissions
-     (when-let [[k _]
+     (when-let [[k ssa-name]
                 (find bindings sym)]
        ;; never inline a binding at macro time!
        (let [;; pass along tag of expression!
@@ -98,7 +98,7 @@
                  (mark-resolve-sym k)
                  (ctx-fn
                   (fn [_ctx bindings]
-                    (eval/resolve-symbol bindings k))
+                    (eval/resolve-symbol bindings ssa-name))
                   k))]
          [k v]))
      (when-let [kv (lookup* ctx sym call?)]
