@@ -95,7 +95,7 @@
        ;; never inline a binding at macro time!
        (let [;; pass along tag of expression!
              v (if call? ;; resolve-symbol is already handled in the call case
-                 (mark-resolve-sym k)
+                 (mark-resolve-sym ssa-name #_k)
                  (ctx-fn
                   (fn [_ctx bindings]
                     (eval/resolve-symbol bindings ssa-name))

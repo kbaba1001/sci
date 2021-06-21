@@ -257,10 +257,13 @@
                              body-exprs)
                      body-exprs)
         {:keys [:params :body]} (maybe-destructured binding-vector body-exprs)
+        ssa-params (mapv #(if (= '& %)
+                            %
+                            (gensym %)) params)
         ctx (update ctx :bindings merge (zipmap params
-                                                (repeat nil)))
+                                                ssa-params))
         body (return-do fn-expr (analyze-children ctx body))]
-    (->FnBody params body fixed-arity var-arg-name)))
+    (->FnBody ssa-params body fixed-arity var-arg-name)))
 
 (defn analyzed-fn-meta [ctx m]
   (let [;; seq expr has location info with 2 keys
