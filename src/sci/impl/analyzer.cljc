@@ -287,8 +287,10 @@
         bodies (if (seq? (first body))
                  body
                  [body])
-        ctx (if fn-name (assoc-in ctx [:bindings fn-name] nil)
+        ssa-name (when fn-name (gensym fn-name))
+        ctx (if fn-name (assoc-in ctx [:bindings fn-name] ssa-name)
                 ctx)
+        fn-name ssa-name
         analyzed-bodies (reduce
                          (fn [{:keys [:max-fixed :min-varargs] :as acc} body]
                            (let [arglist (first body)
