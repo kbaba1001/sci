@@ -156,9 +156,11 @@
                        (when (instance? clazz e)
                          (reduced
                           [::try-result
-                           (eval ctx
-                                 (assoc bindings (:binding c) e)
-                                 (:body c))]))))
+                           (do
+                             (.put ^java.util.HashMap bindings (:binding c) e)
+                             (eval ctx
+                                   bindings
+                                   (:body c)))]))))
                    nil
                    catches)]
         r

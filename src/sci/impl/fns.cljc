@@ -86,23 +86,26 @@
      (let [;; tried making bindings a transient, but saw no perf improvement
            ;; it's even slower with less than ~10 bindings which is pretty uncommon
            ;; see https://github.com/borkdude/sci/issues/559
-           bindings
+           ^java.util.HashMap bindings bindings
+           _bindings
            (loop [args* (seq args)
                   params (seq params)
-                  ret bindings]
+                  #_#_ret bindings]
              (if params
                (let [fp (first params)]
                  (if (= '& fp)
-                   (assoc ret (second params) args*)
+                   (.put bindings (second params) args*)
+                   ;; (assoc ret (second params) args*)
                    (do
                      (when-not args*
                        (throw-arity ctx nsm fn-name macro? args))
+                     (.put bindings fp (first args*))
                      (recur (next args*) (next params)
-                            (assoc-3 ret fp (first args*))))))
+                            #_(assoc-3 ret fp (first args*))))))
                (do
                  (when args*
                    (throw-arity ctx nsm fn-name macro? args))
-                 ret)))
+                 #_ret)))
            ret (eval/eval ctx bindings body)
            ;; m (meta ret)
            recur? (instance? Recur ret)]
@@ -242,8 +245,11 @@
 
 (defn eval-fn [ctx bindings fn-name fn-bodies macro? single-arity self-ref?]
   (let [self-ref (when self-ref? (atom nil))
-        bindings (if self-ref?
-                   (assoc bindings fn-name
+        _bindings (if self-ref?
+                    (.put ^java.util.HashMap bindings fn-name
+                          (fn call-self [& args]
+                            (apply @self-ref args)))
+                    #_(assoc bindings fn-name
                              (fn call-self [& args]
                                (apply @self-ref args)))
                    bindings)
