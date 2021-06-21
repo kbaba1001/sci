@@ -54,7 +54,7 @@
          let-vec (vec (mapcat (fn [local ith]
                                 [local ith]) locals nths))
          assocs (mapcat (fn [local fn-param]
-                          `[~'bindings (assoc-3 ~'bindings ~local ~fn-param)])
+                          `[~'_bindings (.put ~(with-meta 'bindings {:tag 'java.util.HashMap}) ~local ~fn-param) #_(assoc-3 ~'bindings ~local ~fn-param)])
                         locals fn-params)
          recurs (map (fn [n]
                        `(nth-2 ~'recur-val ~n))

@@ -55,7 +55,7 @@
   "The let macro from clojure.core"
   [ctx bindings let-bindings exprs]
   (let [[ctx bindings] (loop [ctx ctx
-                              bindings bindings
+                              ;; bindings bindings
                               let-bindings let-bindings]
                          (let [let-name (first let-bindings)
                                let-bindings (rest let-bindings)
@@ -63,12 +63,12 @@
                                rest-let-bindings (next let-bindings)
                                v (eval ctx bindings let-val)
                                ;; bindings (faster/get-2 ctx :bindings)
-                               bindings (faster/assoc-3 bindings let-name v)
+                               _bindings (.put ^java.util.HashMap bindings let-name v) #_(faster/assoc-3 bindings let-name v)
                                ;; ctx (faster/assoc-3 ctx :bindings bindings)
                                ]
                            (if-not rest-let-bindings
                              [ctx bindings]
-                             (recur ctx bindings
+                             (recur ctx #_bindings
                                     rest-let-bindings))))]
     (when exprs
       (loop [exprs exprs]
@@ -126,7 +126,7 @@
 
 (defmacro resolve-symbol [bindings sym]
   `(.get ~(with-meta bindings
-            {:tag 'java.util.Map}) ~sym))
+            {:tag 'java.util.HashMap}) ~sym))
 
 (declare eval-string*)
 

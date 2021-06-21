@@ -73,13 +73,13 @@
                 (= 'ns (first form))
                 (= 'require (first form)))
         (let [analyzed (ana/analyze ctx form true)
-              bindings (:bindings ctx)
+              bindings (java.util.HashMap.) #_(:bindings ctx)
               ret (if (instance? sci.impl.types.EvalForm analyzed)
                     (eval-form ctx (t/getVal analyzed))
                     (eval/eval ctx bindings analyzed))]
           ret)))
     (let [analyzed (ana/analyze ctx form)
-          bindings (:bindings ctx)
+          bindings (java.util.HashMap.) #_(:bindings ctx)
           ret (eval/eval ctx bindings analyzed)]
       ret)))
 
