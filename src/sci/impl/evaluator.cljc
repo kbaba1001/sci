@@ -78,7 +78,7 @@
                    nexprs (next exprs)]
                (if nexprs (recur nexprs)
                    ret))))
-      (finally
+      #_(finally
         (run! #(.remove ^java.util.HashMap bindings %)
               (take-nth 2 let-bindings))))))
 
