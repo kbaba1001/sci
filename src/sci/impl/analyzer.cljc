@@ -384,8 +384,14 @@
                  binding-name (if t (vary-meta binding-name
                                                assoc :tag t)
                                   binding-name)
-                 v (analyze ctx binding-value)]
-             [(update ctx :bindings assoc binding-name v)
+                 v (analyze ctx binding-value)
+                 p (promise)
+                 v (ctx-fn (fn [ctx bindings]
+                             (let [r (eval/eval ctx bindings v)]
+                               (deliver p r)
+                               r))
+                           binding-value)]
+             [(update ctx :bindings assoc binding-name p)
               (conj new-let-bindings binding-name v)]))
          [ctx []]
          (partition 2 destructured-let-bindings))

@@ -90,7 +90,7 @@
   (let [bindings (faster/get-2 ctx :bindings)]
     (or
      ;; bindings are not checked for permissions
-     (when-let [[k _]
+     (when-let [[k v]
                 (find bindings sym)]
        ;; never inline a binding at macro time!
        (let [;; pass along tag of expression!
@@ -98,11 +98,19 @@
                  (when-not (contains? (:param-map ctx) sym)
                    (vswap! cb conj sym)))
              v (if call? ;; resolve-symbol is already handled in the call case
-                 (mark-resolve-sym k)
-                 (ctx-fn
-                  (fn [_ctx bindings]
-                    (eval/resolve-symbol bindings k))
-                  k))]
+                 (if (instance? clojure.lang.IDeref v)
+                   v
+                   (mark-resolve-sym k))
+                 (if (instance? clojure.lang.IDeref v)
+                   (ctx-fn
+                    (fn [_ctx _bindings]
+                      ;; (prn :direct k)
+                      @v)
+                    k)
+                   (ctx-fn
+                    (fn [_ctx bindings]
+                      (eval/resolve-symbol bindings k))
+                    k)))]
          [k v]))
      (when-let [kv (lookup* ctx sym call?)]
        (when (:check-permissions ctx)
