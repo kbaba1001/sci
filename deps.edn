@@ -1,11 +1,11 @@
 {:paths ["resources" "src"]
- :deps {borkdude/edamame {:mvn/version "0.0.11"}
+ :deps {borkdude/edamame {:mvn/version "0.0.19"}
         borkdude/sci.impl.reflector {:mvn/version "0.0.1"}}
  :aliases
  {:examples {:extra-paths ["examples"]}
-  :test {:extra-paths ["test"]
+  :test {:extra-paths ["test" "test-resources"]
          :extra-deps {org.clojure/clojure {:mvn/version "1.9.0"}
-                      org.clojure/clojurescript {:mvn/version "1.10.597"}
+                      org.clojure/clojurescript {:mvn/version "1.10.866"}
                       clj-commons/conch {:mvn/version "0.9.2"}}}
   :clj-test-runner
   {:extra-deps {com.cognitect/test-runner
@@ -31,7 +31,7 @@
   {:extra-deps
    {com.clojure-goes-fast/clj-async-profiler {:mvn/version "0.4.0"}}
    :extra-paths ["bench"]
-   :jvm-opts ["-Djdk.attach.allowAttachSelf"]
+   :jvm-opts ["-Djdk.attach.allowAttachSelf" "-Dclojure.compiler.direct-linking=true"]
    :main-opts ["-m" "sci.profile"]}
   :clojure-1.11.0
   {:extra-deps {org.clojure/clojure {:mvn/version "1.11.0-alpha1"}}}}}

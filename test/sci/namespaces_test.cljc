@@ -92,7 +92,10 @@
   (is (= 'clojure.set (eval* "(ns-name (the-ns (the-ns 'clojure.set)))")))
   (is (= 'clojure.core (eval* "(alias 'c 'clojure.core) (ns-name (get (ns-aliases *ns*) 'c))")))
   (is (contains? (set (eval* "(clojure.repl/dir-fn 'clojure.string)"))
-                 'last-index-of)))
+                 'last-index-of))
+  (is (true? (eval* "(def foo-ns (create-ns 'foo)) (def another-foo-ns (create-ns 'foo))
+                     (and (identical? foo-ns another-foo-ns)
+                     (= 'foo (ns-name foo-ns)))"))))
 
 (deftest autoresolve-test
   (is (= :user/foo (eval* "::foo")))
@@ -182,7 +185,20 @@
 (def o1 (resolve 'Object))
 (import '[java.lang Object])
 (def o2 (resolve 'Object))
-[(some? o1) (some? o2)]")))))
+[(some? o1) (some? o2)]"))))
+  (testing "issue 637: config already contain name of referred var in config"
+    (let [remote {'cake "cake"}
+          opts {:namespaces {'remote remote
+                             'user {'cake "init"}}}]
+      (is (= [nil "bar"]
+             (sci/binding [sci/out *out*]
+               (sci/eval-form
+                (sci/init opts)
+                '(do (require '[remote :refer [cake]])
+                     (ns-unmap *ns* 'cake)
+                     (def resolved (resolve 'cake))
+                     (intern *ns* 'cake "bar")
+                     [resolved cake]))))))))
 
 (deftest find-var-test
   (is (eval* "(= #'clojure.core/map (find-var 'clojure.core/map))"))

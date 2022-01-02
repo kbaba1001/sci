@@ -1,8 +1,10 @@
 (ns sci.interop-test
   (:require
-   [clojure.test :as test :refer [deftest is #?(:clj testing)]]
+   [clojure.test :as test :refer [deftest is testing #?(:cljs async)]]
    [sci.test-utils :as tu]
-   #?(:cljs [clojure.string :as str])))
+   #?(:clj [sci.core :as sci])
+   #?(:cljs [clojure.string :as str]))
+  #?(:clj (:import PublicFields)))
 
 (defn eval* [expr]
   (tu/eval* expr {}))
@@ -35,6 +37,10 @@
                                 {:classes {'java.util.Map 'java.util.Map
                                            :public-class (fn [o]
                                                            (when (instance? java.util.Map o) java.util.Map))}})))))))
+
+#?(:clj
+   (deftest instance-fields
+     (is (= 3 (sci/eval-string "(.-x (PublicFields.))" {:classes {'PublicFields PublicFields}})))))
 
 #?(:clj
    (deftest static-fields
@@ -126,6 +132,12 @@
    (deftest constructor-test
      (is (= 42 (tu/eval* "(js/parseInt (.-message (js/Error. \"42\")))"
                          {:classes {:allow :all
+                                    'js js/global}})))
+     (is (= 42 (tu/eval* "(let [err js/Error] (js/parseInt (.-message (err. \"42\"))))"
+                         {:classes {:allow :all
+                                    'js js/global}})))
+     (is (= 42 (tu/eval* "(def err js/Error) (js/parseInt (.-message (err. \"42\")))"
+                         {:classes {:allow :all
                                     'js js/global}})))))
 
 #?(:cljs
@@ -140,3 +152,25 @@
 #?(:cljs
    (deftest js-reader-test
      (is (= (js->clj #js [1 2 3]) (js->clj (tu/eval* "#js [1 2 3]" {}))))))
+
+#?(:cljs
+   (deftest preserve-clojure-vals-in-args-test
+     (testing "interop doesn't convert values to Clojure values automatically"
+       (async done
+              (.then (tu/eval* "(.then (.resolve js/Promise {:a 1}) (clojure.core/fn [{:keys [:a] :as m}] a))"
+                               {:classes
+                                {'js goog/global :allow :all}})
+                     (fn [a]
+                       (is (= 1 a))
+                       (done)))))))
+
+#?(:cljs
+   (deftest dot-in-js-invocation
+     (is (str/includes?
+          (tu/eval* "(first (js/process.argv.slice 0))"
+                    {:classes
+                     {'js goog/global :allow :all}})
+          "node"))
+     (is (tu/eval* "(js/Promise.all [])"
+                   {:classes
+                    {'js goog/global :allow :all}}))))

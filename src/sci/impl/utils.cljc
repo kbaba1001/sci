@@ -1,5 +1,6 @@
 (ns sci.impl.utils
   {:no-doc true}
+  (:refer-clojure :exclude [eval])
   (:require [clojure.string :as str]
             [sci.impl.types :as t]
             [sci.impl.vars :as vars]))
@@ -12,36 +13,7 @@
 (defn constant? [x]
   (or (number? x) (string? x) (keyword? x) (boolean? x)))
 
-(defn eval? [x]
-  (some-> x meta :sci.impl/op))
-
 (def kw-identical? #?(:clj identical? :cljs keyword-identical?))
-
-(defn mark-eval-call
-  ([expr]
-   (vary-meta
-    expr
-    (fn [m]
-      (-> m
-          (assoc :sci.impl/op :call)
-          (assoc :ns @vars/current-ns)
-          (assoc :file @vars/current-file)))))
-  ([expr extra-key extra-val]
-   (vary-meta
-    expr
-    (fn [m]
-      (-> m
-          (assoc :sci.impl/op :call)
-          (assoc :ns @vars/current-ns)
-          (assoc :file @vars/current-file)
-          (assoc extra-key extra-val))))))
-
-(defn mark-eval
-  [expr]
-  (vary-meta
-   expr
-   (fn [m]
-     (assoc m :sci.impl/op :eval))))
 
 (defn throw-error-with-location
   ([msg iobj] (throw-error-with-location msg iobj {}))
@@ -62,55 +34,94 @@
 
 (def needs-ctx (symbol "needs-ctx"))
 
+#?(:cljs
+   (def allowed-append "used for allowing interop in with-out-str"
+     (symbol "append")))
+
+#?(:clj
+   (defn rewrite-ex-msg [ex-msg env fm]
+     (if ex-msg
+       (let [[_ printed-fn] (re-matches #"Wrong number of args \(\d+\) passed to: (.*)" ex-msg)
+             fn-pat #"(sci\.impl\.)?fns/fun/arity-([0-9])+--\d+"
+             [match _prefix arity] (re-find fn-pat ex-msg)
+             prefix "sci.impl."
+             friendly-name (when arity (str "function of arity " arity))
+             ex-msg (if (:name fm)
+                      (let [ns (symbol (str (:ns fm)))
+                            var-name (:name fm)
+                            var (get-in @env [:namespaces ns var-name])
+                            fstr (when var (let [varf (if (instance? clojure.lang.IDeref var)
+                                                        (deref var)
+                                                        var)
+                                                 varf (or
+                                                       ;; resolve macro inner fn for comparison
+                                                       (some-> varf meta :sci.impl/inner-fn)
+                                                       varf)
+                                                 fstr (clojure.lang.Compiler/demunge (str varf))
+                                                 fstr (first (str/split fstr #"@"))
+                                                 fstr (str/replace fstr (re-pattern (str "^" prefix)) "")]
+                                            fstr))]
+                        (cond (and fstr printed-fn (= fstr printed-fn))
+                              (str/replace ex-msg printed-fn
+                                           (str (:ns fm) "/" (:name fm)))
+                              friendly-name (str/replace ex-msg match friendly-name)
+                              :else ex-msg))
+                      ex-msg)]
+         ex-msg)
+       ex-msg)))
+
 (defn rethrow-with-location-of-node
   ([ctx ^Throwable e raw-node] (rethrow-with-location-of-node ctx (:bindings ctx) e raw-node))
   ([ctx bindings ^Throwable e raw-node]
-   (if *in-try* (throw e)
-       (let [node (t/sexpr raw-node)
-             m (meta node)
-             f (when (seqable? node) (first node))
-             fm (some-> f meta)
-             op (when (and fm m)
-                  (.get ^java.util.Map m :sci.impl/op))
-             special? (or
-                       ;; special call like def
-                       (and (symbol? f) (not op))
-                       ;; anonymous function
-                       (kw-identical? :fn op)
-                       ;; special thing like require
-                       (identical? needs-ctx op))
+   (if #?(:clj (or *in-try*
+                   (not= (:main-thread-id ctx)
+                         (.getId (Thread/currentThread))))
+          :cljs *in-try*) (throw e)
+       (let [stack (t/stack raw-node)
+             node (t/sexpr raw-node)
+             f (when (seqable? node)
+                 (first node))
+             fm (or (:sci.impl/f-meta stack)
+                    (some-> f meta))
              env (:env ctx)
-             id (:id ctx)]
-         (when (not special?)
-           (swap! env update-in [:sci.impl/callstack id]
-                  (fn [vt]
-                    (if vt
-                      (do (vswap! vt conj node)
-                          vt)
-                      (volatile! (list node))))))
+             id (:id ctx)
+             d (ex-data e)
+             st (or (when-let [st (:sci.impl/callstack d)]
+                      st)
+                    (volatile! '()))]
+         (when stack
+           (when-not (:special stack)
+             #_(swap! env update-in [:sci.impl/callstack id]
+                    (fn [vt]
+                      (if vt
+                        (do (vswap! vt conj stack)
+                           vt)
+                        (volatile! (list stack)))))
+             (vswap! st conj stack)))
          (let [d (ex-data e)
+               ;; st (:sci.impl/callstack d)
                wrapping-sci-error? (isa? (:type d) :sci/error)]
            (if wrapping-sci-error?
              (throw e)
              (let [ex-msg #?(:clj (.getMessage e)
                              :cljs (.-message e))
                    {:keys [:line :column :file]}
-                   (or (some-> env deref
+                   (or stack
+                       (some-> env deref
                                :sci.impl/callstack (get id)
                                deref last meta)
                        (meta node))]
                (if (and line column)
-                 (let [ex-msg (if (and ex-msg (:name fm))
-                                (str/replace ex-msg #"(sci\.impl\.)?fns/fun/[a-zA-Z0-9-]+--\d+"
-                                             (str (:ns fm) "/" (:name fm)))
-                                ex-msg)
+                 (let [ex-msg #?(:clj (rewrite-ex-msg ex-msg env fm)
+                                 :cljs ex-msg)
                        new-exception
                        (let [new-d {:type :sci/error
                                     :line line
                                     :column column
                                     :message ex-msg
                                     :sci.impl/callstack
-                                    (delay (when-let
+                                    st
+                                    #_(delay (when-let
                                                [v (get-in @(:env ctx) [:sci.impl/callstack (:id ctx)])]
                                              @v))
                                     :file file
@@ -119,7 +130,7 @@
                    (throw new-exception))
                  (throw e)))))))))
 
-(defn iobj? [obj]
+(defn- iobj? [obj]
   (and #?(:clj (instance? clojure.lang.IObj obj)
           :cljs (implements? IWithMeta obj))
        (meta obj)))
@@ -129,20 +140,6 @@
   [obj f & args]
   (if (iobj? obj)
     (apply vary-meta obj f args)
-    obj))
-
-(defn merge-meta
-  "Only adds metadata to obj if d is not nil and if meta on obj isn't already nil."
-  [obj d]
-  (if (and d #?(:clj (instance? clojure.lang.IObj obj)
-                :cljs (implements? IWithMeta obj)))
-    (if-let [m (meta obj)]
-      (do
-        nil
-        ;; this should not happen, turn on for debugging
-        #_(when (identical? m d) (prn :identical obj d m))
-        (with-meta obj (merge m d)))
-      obj)
     obj))
 
 (defn strip-core-ns [sym]
@@ -207,6 +204,9 @@
 (def eval-string* (volatile! nil))
 (def lookup (volatile! nil))
 
+(defn eval [sci-ctx form]
+  (@eval-form-state sci-ctx form))
+
 (defn split-when
   "Like partition-by but splits collection only when `pred` returns
   a truthy value. E.g. `(split-when odd? [1 2 3 4 5]) => ((1 2) (3 4) (5))`"
@@ -220,15 +220,17 @@
 
 (def ana-macros
   '#{do if and or let fn fn* def defn
-     comment loop lazy-seq for doseq case try defmacro
+     comment loop lazy-seq case try defmacro
      declare expand-dot* expand-constructor new . import in-ns ns var
      set! resolve #_#_macroexpand-1 macroexpand})
 
 (defn ctx-fn
   ([f expr]
-   (t/->EvalFn f nil expr))
+   (t/->EvalFn f nil expr nil))
   ([f m expr]
-   (t/->EvalFn f m expr)))
+   (t/->EvalFn f m expr nil))
+  ([f m expr stack]
+   (t/->EvalFn f m expr stack)))
 
 (defn maybe-destructured
   [params body]
@@ -247,3 +249,7 @@
         {:params new-params
          :body [`(let ~lets
                    ~@body)]}))))
+
+(defn log [& xs]
+  #?(:clj (.println System/err (str/join " " xs))
+     :cljs (.log js/console (str/join " " xs))))

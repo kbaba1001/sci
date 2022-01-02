@@ -153,7 +153,12 @@
           [[_ r]
            (reduce (fn [_ c]
                      (let [clazz (:class c)]
-                       (when (instance? clazz e)
+                       (when #?(:cljs
+                                (or (kw-identical? :default clazz)
+                                    (if (instance? sci.impl.types/EvalFn clazz)
+                                      (instance? (eval ctx bindings clazz) e)
+                                      (instance? clazz e)))
+                                :clj (instance? clazz e))
                          (reduced
                           [::try-result
                            (eval ctx
@@ -179,30 +184,37 @@
      (map #(symbol (.getName ^Class %)) (supers clazz))))
 
 (defn eval-instance-method-invocation
-  [ctx bindings instance-expr method-str args]
+  [ctx bindings instance-expr method-str field-access args #?(:cljs allowed)]
   (let [instance-meta (meta instance-expr)
         tag-class (:tag-class instance-meta)
         instance-expr* (eval ctx bindings instance-expr)]
     (if (and (map? instance-expr*)
              (:sci.impl/record (meta instance-expr*))) ;; a sci record
-      (get instance-expr* (keyword (subs method-str 1)))
+      (get instance-expr* (keyword
+                           ;; TODO: strip leading dash in analyzer
+                           method-str))
       (let [instance-class (or tag-class (#?(:clj class :cljs type) instance-expr*))
-            instance-class-name #?(:clj (.getName ^Class instance-class)
-                                   :cljs (.-name instance-class))
-            instance-class-symbol (symbol instance-class-name)
             class->opts (:class->opts ctx)
             allowed? (or
+                      #?(:cljs allowed)
                       (get class->opts :allow)
-                      (get class->opts instance-class-symbol))
+                      (let [instance-class-name #?(:clj (.getName ^Class instance-class)
+                                                   :cljs (.-name instance-class))
+                            instance-class-symbol (symbol instance-class-name)]
+                        (get class->opts instance-class-symbol))
+                      #?(:cljs (.log js/console (str method-str))))
             ^Class target-class (if allowed? instance-class
                                     (when-let [f (:public-class ctx)]
                                       (f instance-expr*)))]
         ;; we have to check options at run time, since we don't know what the class
         ;; of instance-expr is at analysis time
-        (when-not target-class
+        (when-not #?(:clj target-class
+                     :cljs allowed?)
           (throw-error-with-location (str "Method " method-str " on " instance-class " not allowed!") instance-expr))
-        (let [args (map #(eval ctx bindings %) args)] ;; eval args!
-          (interop/invoke-instance-method instance-expr* target-class method-str args))))))
+        (if field-access
+          (interop/invoke-instance-field instance-expr* target-class method-str)
+          (let [args (map #(eval ctx bindings %) args)] ;; eval args!
+            (interop/invoke-instance-method instance-expr* target-class method-str args)))))))
 
 ;;;; End interop
 
@@ -212,12 +224,15 @@
 
 (defn eval-resolve
   ([ctx bindings sym]
-   (let [sym (eval ctx bindings sym)]
-     (second (@utils/lookup ctx sym false))))
+   (eval-resolve ctx bindings nil sym))
   ([ctx bindings env sym]
-   (when-not (contains? env sym)
-     (let [sym (eval ctx bindings sym)]
-       (second (@utils/lookup ctx sym false))))))
+   (when (or (not env)
+             (not (contains? env sym)))
+     (let [sym (eval ctx bindings sym)
+           res (second (@utils/lookup ctx sym false))]
+       (when-not (instance? #?(:clj sci.impl.types.EvalFn
+                               :cljs sci.impl.types/EvalFn) res)
+         res)))))
 
 (vreset! utils/eval-resolve-state eval-resolve)
 

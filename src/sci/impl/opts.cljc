@@ -3,9 +3,9 @@
   (:require
    #?(:cljs [goog.string])
    [sci.impl.namespaces :as namespaces]
+   [sci.impl.types]
    [sci.impl.utils :as utils :refer [strip-core-ns]]
    [sci.impl.vars :as vars]
-   [sci.impl.types :as types]
    [sci.lang])
   #?(:clj (:import [sci.impl.types IReified])))
 
@@ -14,18 +14,25 @@
 
 (defn init-env! [env bindings aliases namespaces imports load-fn]
   (swap! env (fn [env]
-               (let [namespaces (merge-with merge
-                                            namespaces/namespaces
-                                            {'user (assoc bindings
-                                                          :obj vars/user-ns)}
-                                            namespaces
-                                            (:namespaces env))
+               (let [env-nss (:namespaces env)
+                     namespaces (merge-with merge
+                                            (or
+                                             ;; either the env has already got namespaces
+                                             env-nss
+                                             ;; or we need to install the default namespaces
+                                             namespaces/namespaces)
+                                            (when-not env-nss
+                                              ;; can skip when env has already got namespaces
+                                              {'user (assoc bindings
+                                                            :obj vars/user-ns)})
+                                            namespaces)
                      aliases (merge namespaces/aliases aliases
                                     (get-in env [:namespaces 'user :aliases]))
                      namespaces (-> namespaces
                                     (update 'user assoc :aliases aliases)
                                     (update 'clojure.core assoc 'global-hierarchy
-                                            (vars/->SciVar (make-hierarchy) 'global-hierarchy nil false)))
+                                            (vars/->SciVar (make-hierarchy) 'global-hierarchy
+                                              {:ns vars/clojure-core-ns} false)))
                      imports (if-let [env-imports (:imports env)]
                                (merge env-imports imports)
                                imports)]
@@ -130,7 +137,6 @@
            :imports
            :features
            :load-fn
-           :uberscript ;; used by babashka, not public!
            :readers
            :reify-fn
            :proxy-fn
@@ -139,18 +145,18 @@
         imports (merge default-imports imports)
         bindings bindings
         _ (init-env! env bindings aliases namespaces imports load-fn)
-        raw-classes classes
-        classes (normalize-classes (merge default-classes raw-classes))
+        raw-classes (merge default-classes classes)
+        classes (normalize-classes raw-classes)
         ctx (assoc (->ctx {} env features readers (or allow deny))
                    :allow (when allow (process-permissions #{} allow))
                    :deny (when deny (process-permissions #{} deny))
-                   :uberscript uberscript
                    :reify-fn (or reify-fn default-reify-fn)
                    :proxy-fn proxy-fn
                    :disable-arity-checks disable-arity-checks
                    :public-class (:public-class classes)
                    :raw-classes raw-classes ;; hold on for merge-opts
-                   :class->opts (:class->opts classes))]
+                   :class->opts (:class->opts classes)
+                   #?@(:clj [:main-thread-id (.getId (Thread/currentThread))]))]
     ctx))
 
 (defn merge-opts [ctx opts]
@@ -162,10 +168,10 @@
                 :imports
                 :features
                 :load-fn
-                :uberscript ;; used by babashka, not public!
                 :readers
                 :reify-fn
-                :disable-arity-checks]} opts
+                :disable-arity-checks]
+         :or {disable-arity-checks (:disable-arity-checks ctx)}} opts
         env (:env ctx)
         _ (init-env! env bindings aliases namespaces imports load-fn)
         raw-classes (merge (:raw-classes ctx) classes)
@@ -173,10 +179,10 @@
         ctx (assoc (->ctx {} env features readers (or (:check-permissions ctx) allow deny))
                    :allow (when allow (process-permissions (:allow ctx) allow))
                    :deny (when deny (process-permissions (:deny ctx) deny))
-                   :uberscript uberscript
                    :reify-fn reify-fn
                    :disable-arity-checks disable-arity-checks
                    :public-class (:public-class classes)
                    :raw-classes raw-classes
-                   :class->opts (:class->opts classes))]
+                   :class->opts (:class->opts classes)
+                   :main-thread-id (:main-thread-id ctx))]
     ctx))

@@ -1,8 +1,10 @@
 (ns sci.core
   (:refer-clojure :exclude [with-bindings with-in-str with-out-str
                             with-redefs binding future pmap alter-var-root
-                            ns create-ns set! *1 *2 *3 *e])
+                            intern ns create-ns set! *1 *2 *3 *e
+                            ns-name])
   (:require
+   [sci.impl.callstack :as cs]
    [sci.impl.interpreter :as i]
    [sci.impl.io :as sio]
    [sci.impl.macros :as macros]
@@ -13,7 +15,7 @@
    [sci.impl.utils :as utils]
    [sci.impl.vars :as vars])
   #?(:cljs (:require-macros
-            [sci.core :refer [with-bindings with-out-str copy-var]])))
+            [sci.core :refer [with-bindings with-out-str copy-var copy-ns]])))
 
 #?(:clj (set! *warn-on-reflection* true))
 
@@ -87,6 +89,7 @@
     `(with-bindings ~(apply hash-map bindings)
        (do ~@body))))
 
+;; I/O
 (def in "Sci var that represents sci's `clojure.core/*in*`" sio/in)
 (def out "Sci var that represents sci's `clojure.core/*out*`" sio/out)
 (def err "Sci var that represents sci's `clojure.core/*err*`" sio/err)
@@ -95,6 +98,10 @@
 (def print-length "Sci var that represents sci's `clojure.core/*print-length*`" sio/print-length)
 (def print-level "Sci var that represents sci's `clojure.core/*print-level*`" sio/print-level)
 (def print-meta "Sci var that represents sci's `clojure.core/*print-meta*`" sio/print-meta)
+(def print-readably "Sci var that represents sci's `clojure.core/*print-readably*`" sio/print-readably)
+#?(:cljs (def print-fn "Sci var that represents sci's `cljs.core/*print-fn*`" sio/print-fn))
+#?(:cljs (def print-newline "Sci var that represents sci's `cljs.core/*print-newline*`" sio/print-newline))
+
 (def *1 namespaces/*1)
 (def *2 namespaces/*2)
 (def *3 namespaces/*3)
@@ -119,11 +126,18 @@
   StringWriter.  Returns the string created by any nested printing
   calls."
     [& body]
-    `(let [out# (macros/? :clj (java.io.StringWriter.)
-                          :cljs (goog.string/StringBuffer.))]
-       (with-bindings {out out#}
-         (do ~@body)
-         (str out#)))))
+    (macros/? :clj
+              `(let [out# (java.io.StringWriter.)]
+                 (with-bindings {out out#}
+                   (do ~@body)
+                   (str out#)))
+              :cljs
+              `(let [sb# (goog.string/StringBuffer.)]
+                 (cljs.core/binding []
+                   (with-bindings {sci.core/print-newline true
+                                   sci.core/print-fn (fn [x#] (.append sb# x#))}
+                     (do ~@body)
+                     (str sb#)))))))
 
 (macros/deftime
   (defmacro future
@@ -157,6 +171,17 @@
   current value plus any args."
   [v f & args]
   (apply vars/alter-var-root v f args))
+
+(defn intern
+  "Finds or creates a sci var named by the symbol name in the namespace
+  ns (which can be a symbol or a sci namespace), setting its root
+  binding to val if supplied. The namespace must exist in the ctx. The
+  sci var will adopt any metadata from the name symbol.  Returns the
+  sci var."
+  ([ctx sci-ns name]
+   (namespaces/sci-intern ctx sci-ns name))
+  ([ctx sci-ns name val]
+   (namespaces/sci-intern ctx sci-ns name val)))
 
 (defn eval-string
   "Evaluates string `s` as one or multiple Clojure expressions using the Small Clojure Interpreter.
@@ -257,8 +282,112 @@
   (let [ctx (assoc ctx :id (or (:id ctx) (gensym)))]
     (i/eval-form ctx form)))
 
-;;;; Scratch
+(defn stacktrace
+  "Returns list of stacktrace element maps from exception, if available."
+  [ex]
+  (some-> ex ex-data :sci.impl/callstack cs/stacktrace))
 
-(comment
-  (eval-string "(inc x)" {:bindings {'x 2}})
-  )
+(defn format-stacktrace
+  "Returns a list of formatted stack trace elements as strings from stacktrace."
+  [stacktrace]
+  (cs/format-stacktrace stacktrace))
+
+(defn ns-name
+  "Returns name of SCI ns as symbol."
+  [sci-ns]
+  (namespaces/sci-ns-name sci-ns))
+
+(defn -copy-ns
+  {:no-doc true}
+  [ns-publics-map sci-ns]
+  (reduce (fn [ns-map [var-name var]]
+            (let [m (:meta var)]
+              (assoc ns-map var-name
+                     (new-var (symbol var-name) (:val var)
+                              (assoc m :ns sci-ns)))))
+          {}
+          ns-publics-map))
+
+(defn- process-publics [publics {:keys [exclude]}]
+  (let [publics (if exclude (apply dissoc publics exclude) publics)]
+    publics))
+
+(defn- exclude-when-meta [publics-map meta-fn key-fn val-fn skip-keys ]
+  (reduce (fn [ns-map [var-name var]]
+            (let [m (meta-fn var)]
+              (if (some m skip-keys)
+                ns-map
+                (assoc ns-map (key-fn var-name) (val-fn var m)))))
+          {}
+          publics-map))
+
+(defn- meta-fn [opts]
+  (cond (= :all opts) identity
+        opts #(select-keys %  opts)
+        :else #(select-keys % [:arglists
+                               :no-doc
+                               :macro
+                               :doc])))
+
+(macros/deftime
+  (def ^:private cljs-ns-publics
+    (try (resolve 'cljs.analyzer.api/ns-publics)
+         (catch #?(:clj Exception
+                   :cljs :default) _ nil)))
+  (defmacro copy-ns
+    "Returns map of names to SCI vars as a result of copying public
+  Clojure vars from ns-sym (a symbol). Attaches sci-ns (result of
+  sci/create-ns) to meta. Copies :name, :macro :doc, :no-doc
+  and :argslists metadata.
+
+  Options:
+
+  - :exclude: a seqable of names to exclude from the
+  namespace. Defaults to none.
+
+  - :copy-meta: a seqable of keywords to copy from the original var
+  meta.  Use :all instead of a seqable to copy all. Defaults
+  to [:doc :arglists :macro].
+
+  - :exclude-when-meta: seqable of keywords; vars with meta matching
+  these keys are excluded.  Defaults to [:no-doc :skip-wiki]
+
+  The selection of vars is done at compile time which is mostly
+  important for ClojureScript to not pull in vars into the compiled
+  JS. Any additional vars can be added after the fact with sci/copy-var
+  manually.
+"
+    ([ns-sym sci-ns] `(copy-ns ~ns-sym ~sci-ns nil))
+    ([ns-sym sci-ns opts]
+     (macros/? :clj (let [publics-map (ns-publics ns-sym)
+                          publics-map (process-publics publics-map opts)
+                          mf (meta-fn (:copy-meta opts))
+                          publics-map (exclude-when-meta
+                                       publics-map
+                                       meta
+                                       (fn [k]
+                                         (list 'quote k))
+                                       (fn [var m]
+                                         {:name (list 'quote (:name m))
+                                          :val (deref var)
+                                          :meta (list 'quote (mf m))})
+                                       (or (:exclude-when-meta opts)
+                                           [:no-doc :skip-wiki]))]
+                      `(-copy-ns ~publics-map ~sci-ns))
+               :cljs (let [publics-map (cljs-ns-publics ns-sym)
+                           publics-map (process-publics publics-map opts)
+                           mf (meta-fn (:copy-meta opts))
+                           publics-map (exclude-when-meta
+                                        publics-map
+                                        :meta
+                                        (fn [k]
+                                          (list 'quote k))
+                                        (fn [var m]
+                                          {:name (list 'quote (:name var))
+                                           :val (:name var)
+                                           :meta (mf m)})
+                                        (or (:exclude-when-meta opts)
+                                            [:no-doc :skip-wiki]))]
+                       `(-copy-ns ~publics-map ~sci-ns))))))
+
+;;;; Scratch

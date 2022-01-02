@@ -1,6 +1,7 @@
 (ns sci.records-test
   (:require [clojure.test :refer [deftest is testing]]
-            [sci.test-utils :as tu]))
+            [sci.test-utils :as tu]
+            [clojure.string :as str]))
 
 (deftest protocol-test
   (let [prog "
@@ -45,7 +46,7 @@
   (let [prog "
 (defprotocol Foo (sayhello [_ name] \"print a name\"))
 (defrecord Greeter [x y] Foo (sayhello [x _] x))
-(sayhello (Greeter. \"x\" \"y\") \"john\")"]
+(into {} (sayhello (Greeter. \"x\" \"y\") \"john\"))"]
     (is (= {:x "x" :y "y"} (tu/eval* prog {}))))
   (testing "protocol impl arg shadows this arg (the first one)"
     (let [prog "
@@ -112,16 +113,7 @@
 
 (width (Rectangle. 10 10))"]
     (is (= 10 (tu/eval* prog {}))))
-  (let [prog "
-(ns foo)
-(defrecord Rectangle [width height])
-
-(ns bar (:import [foo Rectangle]))
-(defn width [^Rectangle rect]
-  (.-width rect))
-
-(def rect (Rectangle. 10 10))
-(width rect)"]
+  (let [prog "(ns foo) (defrecord Rectangle [width height]) (ns bar (:import [foo Rectangle])) (defn width [^Rectangle rect] (.-width rect)) (def rect (Rectangle. 10 10)) (width rect)"]
     (is (= 10 (tu/eval* prog {})))))
 
 (deftest constructor-test
@@ -142,7 +134,7 @@
            (tu/eval*
             "(defprotocol IFoo (foo [this]))
              (defrecord Foo [x] IFoo (foo [this] (Foo. x)))
-             (foo (Foo. 1))" {})))))
+             (into {} (foo (Foo. 1)))" {})))))
 
 (deftest namespace-test
   (let [prog "
@@ -164,3 +156,11 @@
   (let [prog "
 (ns foo) (defrecord Foo []) (derive Foo ::bar) (isa? (type {}) ::bar)"]
     (is (false? (tu/eval* prog {})))))
+
+(deftest to-string-test
+  (let [prog "(defrecord A [x] Object (toString [x] (str \"ARecord@\" (into {} x)))) (str (->A 1))"]
+    (is (= "ARecord@{:x 1}" (tu/eval* prog {})))))
+
+(deftest roundtrip-test
+  (let [prog "(ns foo) (defrecord A [x y z]) (str [#foo.A{:x 1 :y 2 :z 3} (read-string \"#foo.A{:x 1 :y 2 :z 3}\")])"]
+    (is (= "[#foo.A{:x 1, :y 2, :z 3} #foo.A{:x 1, :y 2, :z 3}]" (tu/eval* prog {})))))
